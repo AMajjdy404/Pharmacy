@@ -6,6 +6,8 @@ using Pharmacy.API.Errors;
 using Pharmacy.Core.Interfaces;
 using Pharmacy.Core.Models;
 using Pharmacy.API.Dtos;
+using Microsoft.AspNetCore.SignalR;
+using Pharmacy.API.Hubs;
 
 namespace Pharmacy.API.Controllers
 {
@@ -15,12 +17,15 @@ namespace Pharmacy.API.Controllers
     {
         private readonly IGenericRepository<DeliveryMan> _deliveryManRepo;
         private readonly IGenericRepository<Order> _orderRepo;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
         public AppController(IGenericRepository<DeliveryMan> deliveryManRepo,
-            IGenericRepository<Order> orderRepo)
+            IGenericRepository<Order> orderRepo,
+            IHubContext<NotificationHub> hubContext)
         {
             _deliveryManRepo = deliveryManRepo;
             _orderRepo = orderRepo;
+            _hubContext = hubContext;
         }
 
         [HttpPut("updateAvailability")]
@@ -43,6 +48,12 @@ namespace Pharmacy.API.Controllers
 
             _deliveryManRepo.Update(deliveryMan);
             await _deliveryManRepo.SaveChangesAsync();
+
+            await _hubContext.Clients.All.SendAsync(
+               "DeliveryManAvailabilityChanged",
+               deliveryMan.Id,
+               deliveryMan.IsAvaliable
+             );
 
             return Ok(new ApiResponse(200, $"Delivery man availability updated to {deliveryMan.IsAvaliable}"));
         }
@@ -118,6 +129,15 @@ namespace Pharmacy.API.Controllers
             _orderRepo.Update(order);
             await _orderRepo.SaveChangesAsync();
 
+            // Notify admins group
+            await _hubContext.Clients.Group("Admin").SendAsync("DeliveryManOrderStatusChanged", new
+            {
+                orderId = order.Id,
+                status = order.OrderStatus.ToString(),
+                clientName = order.Client?.Name ?? "Unknown",
+                deliveryManId = order.DeliveryManId
+            });
+
             return Ok(new { Message = "Order updated to InDelivery successfully" });
         }
 
@@ -136,6 +156,15 @@ namespace Pharmacy.API.Controllers
             order.OrderStatus = OrderStatus.Delivered;
             _orderRepo.Update(order);
             await _orderRepo.SaveChangesAsync();
+
+            // Notify admins group
+            await _hubContext.Clients.Group("Admin").SendAsync("DeliveryManOrderStatusChanged", new
+            {
+                orderId = order.Id,
+                status = order.OrderStatus.ToString(),
+                clientName = order.Client?.Name ?? "Unknown",
+                deliveryManId = order.DeliveryManId
+            });
 
             return Ok(new { Message = "Order updated to Delivered successfully" });
         }

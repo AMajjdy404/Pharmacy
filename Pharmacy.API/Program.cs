@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pharmacy.API.Extensions;
 using Pharmacy.API.Helpers;
+using Pharmacy.API.Hubs;
 using Pharmacy.API.Middlewares;
 using Pharmacy.Infrastructure.Data;
 using Serilog;
@@ -23,6 +24,7 @@ namespace Pharmacy.API
             builder.Services.AddSwaggerGen();
             builder.Logging.ClearProviders();
             builder.Logging.AddConsole();
+            builder.Services.AddSignalR();
 
 
             builder.Host.UseSerilog((context, configuration) =>
@@ -81,6 +83,7 @@ namespace Pharmacy.API
             app.UseCors("AllowAll");
             app.UseAuthentication();
             app.UseAuthorization();
+            app.MapHub<NotificationHub>("/hubs/notification");
             app.UseMiddleware<ExceptionMiddleware>();
             app.UseDeveloperExceptionPage();
             app.MapControllers();

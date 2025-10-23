@@ -5,9 +5,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Pharmacy.API.Dtos;
 using Pharmacy.API.Errors;
+using Pharmacy.API.Hubs;
 using Pharmacy.Core.Interfaces;
 using Pharmacy.Core.Models;
 using Pharmacy.Core.Services;
@@ -24,13 +26,15 @@ namespace Pharmacy.API.Controllers
         private readonly IGenericRepository<Client> _clientRepo;
         private readonly IPasswordHasher<DeliveryMan> _passwordHasher;
         private readonly IGenericRepository<Order> _orderRepo;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
         public DashboardController(UserManager<AppUser> userManager,
             IGenericRepository<DeliveryMan> deliveryManRepo,
             RoleManager<IdentityRole> roleManager,
             IGenericRepository<Client> clientRepo,
             IPasswordHasher<DeliveryMan> passwordHasher,
-            IGenericRepository<Order> orderRepo
+            IGenericRepository<Order> orderRepo,
+            IHubContext<NotificationHub> hubContext
             )
         {
             _userManager = userManager;
@@ -39,6 +43,7 @@ namespace Pharmacy.API.Controllers
             _clientRepo = clientRepo;
             _passwordHasher = passwordHasher;
             _orderRepo = orderRepo;
+            _hubContext = hubContext;
         }
 
 
@@ -466,6 +471,23 @@ namespace Pharmacy.API.Controllers
             await _orderRepo.AddAsync(order);
             await _orderRepo.SaveChangesAsync();
 
+            // جِب بيانات العميل للـ notification
+            var client = await _clientRepo.GetByIdAsync(order.ClientId);
+
+            // لو في DeliveryMan معين — ابعث له فقط في الجروب بتاعه
+            if (order.DeliveryManId > 0)
+            {
+                var groupName = $"deliveryman-{order.DeliveryManId}";
+                await _hubContext.Clients.Group(groupName).SendAsync("OrderAssignedOrUpdated", new
+                {
+                    orderId = order.Id,
+                    status = order.OrderStatus.ToString(),
+                    clientName = client?.Name ?? "Unknown",
+                    address = order.Address,
+                    amount = order.Amount
+                });
+            }
+
             return Ok(new ApiResponse(200, "Order Created successfully"));
         }
 
@@ -484,6 +506,21 @@ namespace Pharmacy.API.Controllers
 
             _orderRepo.Update(order);
             await _orderRepo.SaveChangesAsync();
+
+            var client = await _clientRepo.GetByIdAsync(order.ClientId);
+
+            if (order.DeliveryManId > 0)
+            {
+                var groupName = $"deliveryman-{order.DeliveryManId}";
+                await _hubContext.Clients.Group(groupName).SendAsync("OrderAssignedOrUpdated", new
+                {
+                    orderId = order.Id,
+                    status = order.OrderStatus.ToString(),
+                    clientName = client?.Name ?? "Unknown",
+                    address = order.Address,
+                    amount = order.Amount
+                });
+            }
 
             return Ok("Order Updated Successfully");
         }
