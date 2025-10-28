@@ -1,4 +1,5 @@
 ﻿using Pharmacy.API.Helpers;
+using Pharmacy.Application;
 using Pharmacy.Core.Interfaces;
 using Pharmacy.Infrastructure.Implementation;
 
@@ -13,6 +14,7 @@ namespace Pharmacy.API.Extensions
             //Services.AddScoped<INotificationService, NotificationService>();
             //Services.AddAutoMapper(typeof(MappingProfiles));
             Services.AddScoped<DataSeeder>();
+            Services.AddHostedService<RefreshTokenCleanupService>();
             return Services;
         }
     }

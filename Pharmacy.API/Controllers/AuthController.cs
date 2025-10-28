@@ -33,8 +33,8 @@ namespace Pharmacy.API.Controllers
             _refreshTokenRepo = refreshTokenRepo;
         }
 
-        
-        
+
+
 
         // ✅ Login (AppUser or DeliveryMan)
         [HttpPost("login-appuser")]
@@ -86,9 +86,13 @@ namespace Pharmacy.API.Controllers
             if (oldToken == null || oldToken.IsRevoked || oldToken.ExpiresAt < DateTime.UtcNow)
                 return Unauthorized(new ApiResponse(401, "Invalid refresh token"));
 
+            if (oldToken.ReplacedByToken != null)
+                return Unauthorized(new ApiResponse(401, "Refresh token already used"));
+
             // Mark old token revoked
             oldToken.IsRevoked = true;
             oldToken.RevokedAt = DateTime.UtcNow;
+            await _refreshTokenRepo.SaveChangesAsync();
 
             string ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 
@@ -97,7 +101,7 @@ namespace Pharmacy.API.Controllers
             if (oldToken.UserType == "AppUser")
             {
                 var user = await _userManager.FindByIdAsync(oldToken.OwnerId);
-                if (user == null) Unauthorized(new ApiResponse(401, "User not found")); 
+                if (user == null) return Unauthorized(new ApiResponse(401, "User not found"));
 
                 tokenResult = await _tokenService.CreateTokenAsync(user, _userManager, ip);
             }
@@ -125,7 +129,7 @@ namespace Pharmacy.API.Controllers
         public async Task<IActionResult> Revoke([FromBody] RefreshRequestDto dto)
         {
             var token = await _refreshTokenRepo.GetFirstOrDefaultAsync(r => r.Token == dto.RefreshToken);
-            if (token == null) return NotFound(new ApiResponse(404, "Token not found")); 
+            if (token == null) return NotFound(new ApiResponse(404, "Token not found"));
 
             token.IsRevoked = true;
             token.RevokedAt = DateTime.UtcNow;
